@@ -25,7 +25,7 @@ public class SnowparkPoc
         Map<String, String> properties = new HashMap<>();
         properties.put("URL", " https://bnyeagle_dev.east-us-2.azure.snowflakecomputing.com:443");
         properties.put("USER", "READ_ALL_DA1_D34_C_EAGLE");
-        properties.put("PASSWORD", ")de361CG#5");
+        properties.put("PASSWORD", "<password>");
         properties.put("ROLE", "READ_ALL_DA1_D34_C_EAGLE");
         properties.put("WAREHOUSE", "DEV_WAREHOUSE");
         properties.put("DB", "EAGLE_DEV_WAREHOUSE_DA1_D34_C_EAGLE");
