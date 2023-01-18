@@ -266,7 +266,10 @@ public class SnowparkPoc
                                                 .value(null)
                                                 .build());
 
-        BigDecimal totalBookCost = dfFifthQuery.stream().map(x -> x.getTitle2ShortTermBookCost().add(x.getTitle2LongTermBookCost()))
+        // (SUM(t2short_term_book_cost_b + t2long_term_book_cost_b)over(PARTITION BY t.title2)
+        BigDecimal totalBookCost = dfFifthQuery.stream()
+                                               .filter(x -> x.getTitle2().equals("Book Realized Gain Loss Summary"))
+                                               .map(x -> x.getTitle2ShortTermBookCost().add(x.getTitle2LongTermBookCost()))
                                                .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal ttc2nd =
             BigDecimal.ZERO.subtract(dfFifthQuery.stream().map(x -> x.getTitle3CurrentPeriodSTReversalBase().add(x.getTitle3CurrentPeriodSTInKindReversalBase()))
