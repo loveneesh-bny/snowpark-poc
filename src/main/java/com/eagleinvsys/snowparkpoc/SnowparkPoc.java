@@ -14,6 +14,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -184,7 +185,10 @@ public class SnowparkPoc
                                                  .value(BigDecimal.valueOf(-1).multiply(dfFifthQuery.stream()
                                                                                                     .map(SummaryRowData::getTitle3CurrentPeriodLTReversalBase)
                                                                                                     .reduce(BigDecimal.ZERO, BigDecimal::add)
-                                                                                                    .add(reversalAdjustment.getLongTermReversalAdjustment())))
+                                                                                                    .add(
+                                                                                                        Objects.requireNonNullElse(
+                                                                                                            reversalAdjustment.getLongTermReversalAdjustment(),
+                                                                                                            BigDecimal.ZERO))))
                                                  .build());
 
         longTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("ST to LT Book Holding Period Reclass")
@@ -242,7 +246,7 @@ public class SnowparkPoc
                                                 .build());
 
         longTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("ST to LT Book Holding Period Reclass - RIK")
-                                                .value(glSum.getSumGLInKind())
+                                                .value(Objects.requireNonNullElse(glSum.getSumGLInKind(), BigDecimal.ZERO))
                                                 .build());
 
         longTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("LT Net Wash Sale Adjustment - RIK")
@@ -355,15 +359,19 @@ public class SnowparkPoc
         shortTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("ST Capital Reversals")
                                                  .value(BigDecimal.valueOf(-1).multiply(dfFifthQuery.stream()
                                                                                                     .map(SummaryRowData::getTitle3CurrentPeriodSTReversalBase)
-                                                                                                    .reduce(BigDecimal.ZERO, BigDecimal::add).add(reversalAdjustment.getShortTermReversalAdjustment())))
+                                                                                                    .reduce(BigDecimal.ZERO, BigDecimal::add)
+                                                                                                    .add(
+                                                                                                        Objects.requireNonNullElse(
+                                                                                                            reversalAdjustment.getShortTermReversalAdjustment(),
+                                                                                                            BigDecimal.ZERO))))
                                                  .build());
 
         shortTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("ST to LT Book Holding Period Reclass")
-                                                 .value(BigDecimal.valueOf(-1).multiply(glSum.getSumGL()))
+                                                 .value(BigDecimal.valueOf(-1).multiply(Objects.requireNonNullElse(glSum.getSumGL(), BigDecimal.ZERO)))
                                                  .build());
 
         shortTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("ST Net Wash Sale Adjustment")
-                                                 .value(BigDecimal.valueOf(-1).multiply(glSum.getSumGL())) // todo
+                                                 .value(BigDecimal.valueOf(-1).multiply(Objects.requireNonNullElse(glSum.getSumGL(), BigDecimal.ZERO))) // todo
                                                  .build());
 
         shortTermSummaryRecords.add(SummaryRecord.builder().summaryTitle(dfFifthQuery.get(0).getTitle1())
@@ -411,12 +419,12 @@ public class SnowparkPoc
                                                  .build());
 
         shortTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("ST to LT Book Holding Period Reclass - RIK")
-                                                 .value(BigDecimal.valueOf(-1).multiply(glSum.getSumGLInKind()))
+                                                 .value(BigDecimal.valueOf(-1).multiply(Objects.requireNonNullElse(glSum.getSumGLInKind(), BigDecimal.ZERO)))
                                                  .build());
 
         // todo
         shortTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("ST Net Wash Sale Adjustment - RIK")
-                                                 .value(BigDecimal.valueOf(-1).multiply(glSum.getSumGLInKind()))
+                                                 .value(BigDecimal.valueOf(-1).multiply(Objects.requireNonNullElse(glSum.getSumGLInKind(), BigDecimal.ZERO)))
                                                  .build());
 
         shortTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("Wash Sale Roll Forward")
@@ -433,7 +441,7 @@ public class SnowparkPoc
 
         shortTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("ST Net Wash Sale Adjustment") //todo - v_ws_l_def_b_m
                                                  .value(glSum.getSumGL()
-                                                             .subtract(reversalAdjustment.getShortTermReversalAdjustment()
+                                                             .subtract(Objects.requireNonNullElse(reversalAdjustment.getShortTermReversalAdjustment(), BigDecimal.ZERO)
                                                                                          .add(dfFifthQuery.stream()
                                                                                                           .map(SummaryRowData::getTitle3CurrentPeriodSTReversalBase)
                                                                                                           .reduce(BigDecimal.ZERO, BigDecimal::add))))
@@ -441,7 +449,7 @@ public class SnowparkPoc
 
         shortTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("LT Net Wash Sale Adjustment") //todo - v_ws_l_def_b_m
                                                  .value(glSum.getSumGL()
-                                                             .subtract(reversalAdjustment.getLongTermReversalAdjustment()
+                                                             .subtract(Objects.requireNonNullElse(reversalAdjustment.getLongTermReversalAdjustment(), BigDecimal.ZERO)
                                                                                          .add(dfFifthQuery.stream()
                                                                                                           .map(SummaryRowData::getTitle3CurrentPeriodLTReversalBase)
                                                                                                           .reduce(BigDecimal.ZERO, BigDecimal::add))))
@@ -451,7 +459,7 @@ public class SnowparkPoc
                                                  .value(dfFifthQuery.stream()
                                                                     .map(x -> BigDecimal.valueOf(-1)
                                                                                         .multiply(x.getTitle3CurrentPeriodSTInKindReversalBase())
-                                                                                        .subtract(glSum.getSumGLInKind()))
+                                                                                        .subtract(Objects.requireNonNullElse(glSum.getSumGLInKind(), BigDecimal.ZERO)))
                                                                     .reduce(BigDecimal.ZERO, BigDecimal::add))
                                                  .build());
 
@@ -497,6 +505,14 @@ public class SnowparkPoc
         DataFrame lotLevelTable = session.table("LOT_LEVEL_WS_POSITION_POC_TEST");
         DataFrame secMasterTable = session.table("SECURITY_MASTER_POC_TEST");
 
+        Column staticDate20200706 = Functions.date_from_parts(Functions.lit("2020"),
+            Functions.lit("07"),
+            Functions.lit("06"));
+
+        Column staticDate20220531 = Functions.date_from_parts(Functions.lit("2022"),
+            Functions.lit("05"),
+            Functions.lit("31"));
+
         // Define joins
         DataFrame queryWithWhereClause = tradeTable
             .join(lotLevelTable, tradeTable.col("entity_id").equal_to(lotLevelTable.col("entity_id"))
@@ -509,7 +525,12 @@ public class SnowparkPoc
             .filter(Functions.trim(tradeTable.col("entity_id"), Functions.lit(" ")).equal_to(Functions.lit("BA32")))
             .filter(tradeTable.col("acct_basis").equal_to(Functions.lit("USTAX")))
             .filter(tradeTable.col("ws_dis_reversal_b").not_equal(Functions.lit(0)))
-            .filter(tradeTable.col("cancel_status").equal_to(Functions.lit("N")))
+            .filter(tradeTable.col("cancel_status").equal_to(Functions.lit("N"))
+                              .or(tradeTable.col("cancel_status").equal_to(Functions.lit("Y")
+                                                                                    .and(tradeTable.col("effective_date")
+                                                                                                   .lt(staticDate20220531)))))
+            .filter(tradeTable.col("effective_date").leq(staticDate20220531))
+            .filter(tradeTable.col("effective_date").geq(staticDate20220531))
             .filter(tradeTable.col("record_type").in(35000, 45000));
 
         //Row[] rows = queryWithWhereClause.collect();
@@ -532,8 +553,8 @@ public class SnowparkPoc
         Row[] row = finalData.collect();
         log.info("Record Count >> " + row.length);
         return ReversalAdjustment.builder()
-                                 .longTermReversalAdjustment((BigDecimal) row[0].get(0))
-                                 .shortTermReversalAdjustment((BigDecimal) row[0].get(1))
+                                 .longTermReversalAdjustment(Objects.requireNonNullElse((BigDecimal) row[0].get(0), BigDecimal.ZERO))
+                                 .shortTermReversalAdjustment(Objects.requireNonNullElse((BigDecimal) row[0].get(1), BigDecimal.ZERO))
                                  .build();
     }
 
@@ -545,6 +566,10 @@ public class SnowparkPoc
         DataFrame disposalLotsTable = session.table("disposal_lots_poc_test");
         DataFrame disposalLotWsTable = session.table("disposal_lot_ws_poc_test");
         DataFrame secMasterTable = session.table("security_master_poc_test");
+
+        Column staticDate20220531 = Functions.date_from_parts(Functions.lit("2022"),
+            Functions.lit("05"),
+            Functions.lit("31"));
 
         // Define joins
         DataFrame tradeTableJoins =
@@ -563,7 +588,10 @@ public class SnowparkPoc
                            .filter(tradeDetailTable.col("cancel_status").not_equal(Functions.lit("Y")))
                            .filter(disposalLotWsTable.col("gain_loss_term_reclass").equal_to(Functions.lit("Y")));
 
-        //Row[] rows = queryWithWhereClause.collect();
+        DataFrame queryWithDateClause = queryWithWhereClause
+            .filter(tradeTable.col("ledger_effective_date").geq(staticDate20220531))
+            .filter(tradeTable.col("ledger_effective_date").leq(staticDate20220531));
+
 
         Column bookGainB = Functions.iff(
             Functions.is_null(disposalLotWsTable.col("book_gain_b")),
@@ -591,15 +619,15 @@ public class SnowparkPoc
             Functions.lit(0));
 
         // Select columns needed from the tables
-        Row[] rows = queryWithWhereClause.select(
+        Row[] rows = queryWithDateClause.select(
             Functions.sum(notInKind).alias("v_sum_gl_b"),
             Functions.sum(inKind).alias("v_sum_gl_b_ink")).collect();
 
         log.info("Record Count >> " + rows.length);
 
         return GLSum.builder()
-                    .sumGL((BigDecimal) rows[0].get(0))
-                    .sumGLInKind((BigDecimal) rows[0].get(1))
+                    .sumGL(Objects.requireNonNullElse((BigDecimal) rows[0].get(0), BigDecimal.ZERO))
+                    .sumGLInKind(Objects.requireNonNullElse((BigDecimal) rows[0].get(1), BigDecimal.ZERO))
                     .build();
 
     }
@@ -626,7 +654,8 @@ public class SnowparkPoc
         DataFrame queryWithWhereClause =
             disposalLotJoin.filter(Functions.trim(tradeTable.col("entity_id"), Functions.lit(" ")).equal_to(Functions.lit("BA32")))
                            .filter(tradeTable.col("acct_basis").equal_to(Functions.lit("USTAX")))
-                           .filter(tradeTable.col("ledger_effective_date").leq(Functions.to_date(Functions.lit("20230101"), Functions.lit("YYYYMMDD")))) // sysdate for
+                           .filter(tradeTable.col("ledger_effective_date").leq(Functions.to_date(
+                               Functions.lit("20220531"), Functions.lit("YYYYMMDD")))) // sysdate for
                            // now
                            .filter(tradeDetailTable.col("cancel_flag").not_equal(Functions.lit("Y")))
                            .filter(tradeDetailTable.col("cancel_status").not_equal(Functions.lit("Y")));
@@ -641,7 +670,7 @@ public class SnowparkPoc
         Row[] rows = queryWithWhereClause.select(Functions.sum(wsDisReversal).alias("lt_reversal_adjst")).collect();
         log.info("Record Count >> " + rows.length);
 
-        return (BigDecimal) rows[0].get(0);
+        return Objects.requireNonNullElse((BigDecimal) rows[0].get(0), BigDecimal.ZERO);
     }
 
     private static BookCostBase executeBookCostBaseQuery(Session session)
@@ -674,6 +703,7 @@ public class SnowparkPoc
             "     and pd.security_alias = sm.security_alias \n" +
             "     and llp.lot_level_position = pcl.position_lot_id \n" +
             "     and llp.lot_level_position = llwsp.lot_level_position(+) \n" +
+            "     and p.effective_date = to_date('20220531','YYYYMMDD') \n" +
             "     and p.acct_basis = 'USTAX'";
 
         DataFrame select = session.sql(sql);
@@ -752,8 +782,8 @@ public class SnowparkPoc
             "      and dl.disposal_lot_id = dws.disposal_lot_id(+) \n" +
             "      and t.security_alias = sm.security_alias \n" +
             "      and t.acct_basis = 'USTAX'\n" +
-            "      and t.ledger_effective_date >= to_date('20150101','YYYYMMDD') \n" +
-            "      and t.ledger_effective_date <= to_date('20230101','YYYYMMDD')\n" +
+            "      and t.ledger_effective_date >= to_date('20220531','YYYYMMDD') \n" +
+            "      and t.ledger_effective_date <= to_date('20220531','YYYYMMDD')\n" +
             "      and NVL(trim(trd.cancel_flag),'X') != 'Y' \n" +
             "      and NVL(trim(trd.cancel_status),'X') != 'Y';\n";
 
