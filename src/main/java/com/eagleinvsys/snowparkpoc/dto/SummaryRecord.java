@@ -1,4 +1,4 @@
-package com.eagleinvsys.snowparkpoc;
+package com.eagleinvsys.snowparkpoc.dto;
 
 import lombok.Builder;
 import lombok.Data;

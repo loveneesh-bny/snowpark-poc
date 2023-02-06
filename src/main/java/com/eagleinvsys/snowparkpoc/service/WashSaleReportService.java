@@ -1,50 +1,45 @@
-package com.eagleinvsys.snowparkpoc;
+package com.eagleinvsys.snowparkpoc.service;
 
 import com.eagleinvsys.snowparkpoc.dto.BookCostBase;
-import com.eagleinvsys.snowparkpoc.dto.FinalCSVReport;
+import com.eagleinvsys.snowparkpoc.dto.FinalSummaryReport;
 import com.eagleinvsys.snowparkpoc.dto.GLSum;
 import com.eagleinvsys.snowparkpoc.dto.ReversalAdjustment;
 import com.eagleinvsys.snowparkpoc.dto.SummaryRecord;
 import com.eagleinvsys.snowparkpoc.dto.SummaryRowData;
-import com.snowflake.snowpark_java.*;
+import com.eagleinvsys.snowparkpoc.util.SnowparkUtils;
+import com.snowflake.snowpark_java.Column;
+import com.snowflake.snowpark_java.DataFrame;
+import com.snowflake.snowpark_java.Functions;
+import com.snowflake.snowpark_java.Row;
+import com.snowflake.snowpark_java.Session;
+import lombok.AllArgsConstructor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.SystemUtils;
+import org.springframework.stereotype.Service;
 
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
 import java.math.BigDecimal;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Slf4j
-public class SnowparkPoc
+@Service
+@AllArgsConstructor
+public class WashSaleReportService
 {
 
-    public static void main(String[] args) {
-        // Replace the <placeholders> below.
-        Map<String, String> properties = new HashMap<>();
-        properties.put("URL", " https://bnyeagle_dev.east-us-2.azure.snowflakecomputing.com:443");
-        properties.put("USER", "READ_ALL_DA1_D34_C_EAGLE");
-        properties.put("PASSWORD", "<password>");
-        properties.put("ROLE", "READ_ALL_DA1_D34_C_EAGLE");
-        properties.put("WAREHOUSE", "DEV_WAREHOUSE");
-        properties.put("DB", "EAGLE_DEV_WAREHOUSE_DA1_D34_C_EAGLE");
-        properties.put("SCHEMA", "DA1D34CEAGLE");
+    private final SnowparkUtils snowparkUtils;
 
-        // Create snowflake session
-        Session session = Session.builder().configs(properties).create();
+    @SneakyThrows
+    public List<FinalSummaryReport> generateWashSaleSummaryReport()
+    {
+        // Create Session
+        Session session = snowparkUtils.getSnowparkSession();
 
         ReversalAdjustment reversalAdjustment = executeReversalAdjQuery(session);
         GLSum glSum = executeGLSum(session);
@@ -55,52 +50,17 @@ public class SnowparkPoc
         // todo - create short term & long term summary records
         List<SummaryRecord> shortTermSummaryRecords = getShortTermSummaryRecords(reversalAdjustment, glSum, priorRevision, bookCostBase, summaryRowDataList);
         List<SummaryRecord> longTermSummaryRecords = getLongTermSummaryRecords(reversalAdjustment, glSum, bookCostBase, summaryRowDataList);
-        List<FinalCSVReport> finalSummaryReportData = generateFinalSummaryReport(shortTermSummaryRecords, longTermSummaryRecords);
+        List<FinalSummaryReport> finalSummaryReport = generateFinalSummaryReport(shortTermSummaryRecords, longTermSummaryRecords);
 
-        writeSummaryInFile(finalSummaryReportData);
         // close session
-        session.close();
+        snowparkUtils.closeSession(session);
+
+        return finalSummaryReport;
     }
 
-    @SneakyThrows
-    private static void writeSummaryInFile(List<FinalCSVReport> finalCSVReportList)
+    private static List<FinalSummaryReport> generateFinalSummaryReport(List<SummaryRecord> shortTermSummaryRecords, List<SummaryRecord> longTermSummaryRecords)
     {
-        LocalDateTime date = LocalDateTime.now();
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMddHHmm");
-        String dateTimeText = date.format(formatter);
-
-        String filePath = SystemUtils.getUserHome().getAbsolutePath() + File.separator + "Snowpark-POC";
-        Path path = Path.of(filePath);
-        if (!Files.exists(path))
-        {
-            Files.createDirectory(path);
-        }
-        String fileName = filePath + File.separator + "SummaryReport-" + dateTimeText + ".csv";
-        FileWriter fileWriter = new FileWriter(fileName);
-        BufferedWriter writer = new BufferedWriter(fileWriter);
-
-        // Write header line
-        writer.write(finalCSVReportList.get(0).getHeaderString());
-        writer.newLine();
-
-        finalCSVReportList.forEach(x -> {
-            try
-            {
-                writer.write(x.getStringValue());
-                writer.newLine();
-            }
-            catch (IOException e)
-            {
-                throw new RuntimeException(e);
-            }
-        });
-        writer.flush();
-        writer.close();
-    }
-
-    private static List<FinalCSVReport> generateFinalSummaryReport(List<SummaryRecord> shortTermSummaryRecords, List<SummaryRecord> longTermSummaryRecords)
-    {
-        List<FinalCSVReport> finalSummaryReportData = new ArrayList<>();
+        List<FinalSummaryReport> finalSummaryReportData = new ArrayList<>();
         LocalDateTime date = LocalDateTime.now();
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MM/dd/yyyy HH:mm");
         String formattedDate = date.format(formatter);
@@ -112,13 +72,13 @@ public class SnowparkPoc
             String titleA = shortTermSummaryRecords.get(i).getSummaryTitle();
             BigDecimal sumValueA = null;
             if (titleA.equalsIgnoreCase("Wash Sale Roll Forward")
-            || titleA.equalsIgnoreCase("Long Holdings Tax Cost")
-            || titleA.equalsIgnoreCase("Current Period Redemption in Kind (RIK) Activity"))
+                || titleA.equalsIgnoreCase("Long Holdings Tax Cost")
+                || titleA.equalsIgnoreCase("Current Period Redemption in Kind (RIK) Activity"))
             {
                 sumValueA = null;
             }
             else if (!titleA.equalsIgnoreCase(longTermSummaryRecords.get(i).getSummaryTitle())
-            || (titleA.equalsIgnoreCase("ST to LT Book Holding Period Reclass")
+                || (titleA.equalsIgnoreCase("ST to LT Book Holding Period Reclass")
                 || titleA.equalsIgnoreCase("ST to LT Book Holding Period Reclass - RIK")))
             {
                 sumValueA = shortTermSummaryRecords.get(i).getValue();
@@ -145,12 +105,12 @@ public class SnowparkPoc
             else if ( ((!titleB.equalsIgnoreCase(titleA)
                 || (titleB.equalsIgnoreCase("ST to LT Book Holding Period Reclass")
                 || titleB.equalsIgnoreCase("ST to LT Book Holding Period Reclass - RIK"))))
-            && !titleB.equalsIgnoreCase("DUMMY"))
+                && !titleB.equalsIgnoreCase("DUMMY"))
             {
                 sumValueB = longTermSummaryRecords.get(i).getValue();
             }
 
-            finalSummaryReportData.add(FinalCSVReport.builder()
+            finalSummaryReportData.add(FinalSummaryReport.builder()
                                                      .entityId("BA32")
                                                      .entityName("BA32")
                                                      .acctBasis("USTAX")
@@ -159,10 +119,14 @@ public class SnowparkPoc
                                                      .reportType("POC WS Report")
                                                      .reportRunDateTime(formattedDate)
                                                      .acctCurrency("USD")
-                                                     .titleA(titleA)
-                                                     .titleB(titleB)
-                                                     .sumValueA(sumValueA)
-                                                     .sumValueB(sumValueB)
+                                                     .titleA((titleA == null || titleA.equalsIgnoreCase("dummy") )? "" : titleA)
+                                                     .titleB((titleB == null || titleB.equalsIgnoreCase("dummy") )? "" : titleB)
+                                                     .sumValueA((sumValueA == null || sumValueA.equals(BigDecimal.ZERO) || sumValueA.signum() == 0) ?
+                                                         BigDecimal.ZERO.stripTrailingZeros() :
+                                                         sumValueA.setScale(2, RoundingMode.HALF_EVEN))
+                                                     .sumValueB((sumValueB == null || sumValueB.equals(BigDecimal.ZERO) || sumValueB.signum() == 0) ?
+                                                         BigDecimal.ZERO.stripTrailingZeros() :
+                                                         sumValueB.setScale(2, RoundingMode.HALF_EVEN))
                                                      .build());
         }
         return finalSummaryReportData;
@@ -175,59 +139,59 @@ public class SnowparkPoc
 
         //todo - Add Empty record
         longTermSummaryRecords.add(SummaryRecord.builder().summaryTitle(dfFifthQuery.get(0).getTitle2())
-                                                 .value(null)
-                                                 .build());
+                                                .value(null)
+                                                .build());
 
         longTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("Long Term Capital Gain")
-                                                 .value(dfFifthQuery.stream()
-                                                                    .map(SummaryRowData::getTitle2LongTermGainBase)
-                                                                    .reduce(BigDecimal.ZERO, BigDecimal::add))
-                                                 .build());
+                                                .value(dfFifthQuery.stream()
+                                                                   .map(SummaryRowData::getTitle2LongTermGainBase)
+                                                                   .reduce(BigDecimal.ZERO, BigDecimal::add))
+                                                .build());
         longTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("Long Term Capital Loss")
-                                                 .value(dfFifthQuery.stream()
-                                                                    .map(SummaryRowData::getTitle2LongTermLossBase)
-                                                                    .reduce(BigDecimal.ZERO, BigDecimal::add)
-                                                     .multiply(BigDecimal.valueOf(-1)))
-                                                 .build());
+                                                .value(dfFifthQuery.stream()
+                                                                   .map(SummaryRowData::getTitle2LongTermLossBase)
+                                                                   .reduce(BigDecimal.ZERO, BigDecimal::add)
+                                                                   .multiply(BigDecimal.valueOf(-1)))
+                                                .build());
 
         longTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("Net Long Term Capital Gain/Loss")
-                                                 .value(dfFifthQuery.stream()
-                                                                    .map(x -> (x.getTitle2LongTermGainBase().subtract(x.getTitle2LongTermLossBase())))
-                                                                    .reduce(BigDecimal.ZERO, BigDecimal::add))
-                                                 .build());
+                                                .value(dfFifthQuery.stream()
+                                                                   .map(x -> (x.getTitle2LongTermGainBase().subtract(x.getTitle2LongTermLossBase())))
+                                                                   .reduce(BigDecimal.ZERO, BigDecimal::add))
+                                                .build());
 
         longTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("Long Term Sale Proceeds")
-                                                 .value(dfFifthQuery.stream()
-                                                                    .map(SummaryRowData::getTitle2LongTermSaleBase)
-                                                                    .reduce(BigDecimal.ZERO, BigDecimal::add))
-                                                 .build());
+                                                .value(dfFifthQuery.stream()
+                                                                   .map(SummaryRowData::getTitle2LongTermSaleBase)
+                                                                   .reduce(BigDecimal.ZERO, BigDecimal::add))
+                                                .build());
         longTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("Long Term Book Cost")
-                                                 .value(dfFifthQuery.stream()
-                                                                    .map(SummaryRowData::getTitle2LongTermBookCost)
-                                                                    .reduce(BigDecimal.ZERO, BigDecimal::add))
-                                                 .build());
+                                                .value(dfFifthQuery.stream()
+                                                                   .map(SummaryRowData::getTitle2LongTermBookCost)
+                                                                   .reduce(BigDecimal.ZERO, BigDecimal::add))
+                                                .build());
 
         longTermSummaryRecords.add(SummaryRecord.builder().summaryTitle(dfFifthQuery.get(0).getTitle3())
-                                                 .value(null)
-                                                 .build());
+                                                .value(null)
+                                                .build());
 
         longTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("LT Capital Deferrals")
-                                                 .value(BigDecimal.ZERO) // todo - not calculated , v_ws_l_def_b_m
-                                                 .build());
+                                                .value(BigDecimal.ZERO) // todo - not calculated , v_ws_l_def_b_m
+                                                .build());
 
         longTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("LT Capital Reversals")
-                                                 .value(BigDecimal.valueOf(-1).multiply(dfFifthQuery.stream()
-                                                                                                    .map(SummaryRowData::getTitle3CurrentPeriodLTReversalBase)
-                                                                                                    .reduce(BigDecimal.ZERO, BigDecimal::add)
-                                                                                                    .add(
-                                                                                                        Objects.requireNonNullElse(
-                                                                                                            reversalAdjustment.getLongTermReversalAdjustment(),
-                                                                                                            BigDecimal.ZERO))))
-                                                 .build());
+                                                .value(BigDecimal.valueOf(-1).multiply(dfFifthQuery.stream()
+                                                                                                   .map(SummaryRowData::getTitle3CurrentPeriodLTReversalBase)
+                                                                                                   .reduce(BigDecimal.ZERO, BigDecimal::add)
+                                                                                                   .add(
+                                                                                                       Objects.requireNonNullElse(
+                                                                                                           reversalAdjustment.getLongTermReversalAdjustment(),
+                                                                                                           BigDecimal.ZERO))))
+                                                .build());
 
         longTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("ST to LT Book Holding Period Reclass")
-                                                 .value(glSum.getSumGL())
-                                                 .build());
+                                                .value(glSum.getSumGL())
+                                                .build());
 
         // todo - (NVL(v_ws_l_def_b_m,0)+NVL(v_sum_gl_b,0))-(v_sum_rev_adjst_l_b+SUM(t.cur_pr_lt_reversal_b))
         longTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("LT Net Wash Sale Adjustment")
@@ -235,14 +199,14 @@ public class SnowparkPoc
                                                 .build());
 
         longTermSummaryRecords.add(SummaryRecord.builder().summaryTitle(dfFifthQuery.get(0).getTitle1())
-                                                 .value(null)
-                                                 .build());
+                                                .value(null)
+                                                .build());
 
         longTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("Long Term Capital Gain")
-                                                 .value(dfFifthQuery.stream()
-                                                                    .map(SummaryRowData::getTitle1LongTermGainBase)
-                                                                    .reduce(BigDecimal.ZERO, BigDecimal::add)) // todo
-                                                 .build());
+                                                .value(dfFifthQuery.stream()
+                                                                   .map(SummaryRowData::getTitle1LongTermGainBase)
+                                                                   .reduce(BigDecimal.ZERO, BigDecimal::add)) // todo
+                                                .build());
 
         // todo - NVL(v_ws_l_def_b,0)-SUM(t.long_term_loss_base)
         longTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("Long Term Capital Loss")
@@ -252,23 +216,23 @@ public class SnowparkPoc
                                                 .build());
 
         longTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("Net Long Term Capital Gain/Loss") // todo - use zero for missing v_ws_s_def_b
-                                                 .value(BigDecimal.ZERO
-                                                     .add(dfFifthQuery.stream()
-                                                                      .map(x -> (x.getTitle1LongTermGainBase().subtract(x.getTitle1LongTermLossBase())))
-                                                                      .reduce(BigDecimal.ZERO, BigDecimal::add)))
-                                                 .build());
+                                                .value(BigDecimal.ZERO
+                                                    .add(dfFifthQuery.stream()
+                                                                     .map(x -> (x.getTitle1LongTermGainBase().subtract(x.getTitle1LongTermLossBase())))
+                                                                     .reduce(BigDecimal.ZERO, BigDecimal::add)))
+                                                .build());
 
         longTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("Long Term Sale Proceeds")
-                                                 .value(dfFifthQuery.stream()
-                                                                    .map(SummaryRowData::getTitle1LongTermSaleBase)
-                                                                    .reduce(BigDecimal.ZERO, BigDecimal::add))
-                                                 .build());
+                                                .value(dfFifthQuery.stream()
+                                                                   .map(SummaryRowData::getTitle1LongTermSaleBase)
+                                                                   .reduce(BigDecimal.ZERO, BigDecimal::add))
+                                                .build());
 
         longTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("Long Term Tax Cost") //todo missing v_ws_s_def_b
-                                                 .value(dfFifthQuery.stream()
-                                                                    .map(SummaryRowData::getTitle2LongTermBookCost)
-                                                                    .reduce(BigDecimal.ZERO, BigDecimal::add))
-                                                 .build());
+                                                .value(dfFifthQuery.stream()
+                                                                   .map(SummaryRowData::getTitle2LongTermBookCost)
+                                                                   .reduce(BigDecimal.ZERO, BigDecimal::add))
+                                                .build());
 
         longTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("Current Period Redemption in Kind (RIK) Activity")
                                                 .value(null)
@@ -469,7 +433,7 @@ public class SnowparkPoc
 
         shortTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("Prior Period Deferrals")
                                                  .value(BigDecimal.ZERO // todo - use zero for missing field v_prior_def_b
-                                                                  .subtract(priorRevision))
+                                                                        .subtract(priorRevision))
                                                  .build());
 
         shortTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("Converted Wash Sales - Fund Merger")
@@ -479,17 +443,17 @@ public class SnowparkPoc
         shortTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("ST Net Wash Sale Adjustment") //todo - v_ws_l_def_b_m
                                                  .value(glSum.getSumGL()
                                                              .subtract(Objects.requireNonNullElse(reversalAdjustment.getShortTermReversalAdjustment(), BigDecimal.ZERO)
-                                                                                         .add(dfFifthQuery.stream()
-                                                                                                          .map(SummaryRowData::getTitle3CurrentPeriodSTReversalBase)
-                                                                                                          .reduce(BigDecimal.ZERO, BigDecimal::add))))
+                                                                              .add(dfFifthQuery.stream()
+                                                                                               .map(SummaryRowData::getTitle3CurrentPeriodSTReversalBase)
+                                                                                               .reduce(BigDecimal.ZERO, BigDecimal::add))))
                                                  .build());
 
         shortTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("LT Net Wash Sale Adjustment") //todo - v_ws_l_def_b_m
                                                  .value(glSum.getSumGL()
                                                              .subtract(Objects.requireNonNullElse(reversalAdjustment.getLongTermReversalAdjustment(), BigDecimal.ZERO)
-                                                                                         .add(dfFifthQuery.stream()
-                                                                                                          .map(SummaryRowData::getTitle3CurrentPeriodLTReversalBase)
-                                                                                                          .reduce(BigDecimal.ZERO, BigDecimal::add))))
+                                                                              .add(dfFifthQuery.stream()
+                                                                                               .map(SummaryRowData::getTitle3CurrentPeriodLTReversalBase)
+                                                                                               .reduce(BigDecimal.ZERO, BigDecimal::add))))
                                                  .build());
 
         shortTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("ST Net Wash Sale Adjustment - RIK")
@@ -515,13 +479,13 @@ public class SnowparkPoc
                                                              .map(x -> x.getTitle3CurrentPeriodLTReversalBase().add(x.getTitle3CurrentPeriodLTInKindReversalBase()))
                                                              .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal currentPeriodSTReversalBase = dfFifthQuery.stream()
-                                                        .map(x -> x.getTitle3CurrentPeriodSTReversalBase().add(x.getTitle3CurrentPeriodSTInKindReversalBase()))
-                                                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+                                                             .map(x -> x.getTitle3CurrentPeriodSTReversalBase().add(x.getTitle3CurrentPeriodSTInKindReversalBase()))
+                                                             .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         // todo - missing fields v_prior_def_b, v_ws_def_merger_b, v_ws_s_def_b_m, v_ws_l_def_b_m
         BigDecimal totalOpenWSDeferrals = BigDecimal.ZERO.subtract(priorRevision).add(BigDecimal.ZERO)
-                                                        .add(BigDecimal.ZERO.subtract(reversalAdjustment.getShortTermReversalAdjustment().add(currentPeriodSTReversalBase)))
-                                                        .add(BigDecimal.ZERO.subtract(reversalAdjustment.getLongTermReversalAdjustment().add(currentPeriodLTReversalBase)));
+                                                         .add(BigDecimal.ZERO.subtract(reversalAdjustment.getShortTermReversalAdjustment().add(currentPeriodSTReversalBase)))
+                                                         .add(BigDecimal.ZERO.subtract(reversalAdjustment.getLongTermReversalAdjustment().add(currentPeriodLTReversalBase)));
 
         shortTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("Total Open WS Deferrals")
                                                  .value(totalOpenWSDeferrals)
@@ -534,20 +498,20 @@ public class SnowparkPoc
         // todo - some missing calcs
 
         shortTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("Long Holdings Tax Cost")
-                                                .value(BigDecimal.ZERO)
-                                                .build());
+                                                 .value(BigDecimal.ZERO)
+                                                 .build());
 
         shortTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("Book Cost")
-                                                .value(bookCostBase.getSumLTBookCost())
-                                                .build());
+                                                 .value(bookCostBase.getSumLTBookCost())
+                                                 .build());
 
         shortTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("Long Capital Deferrals")
-                                                .value(bookCostBase.getSumLTWsDeferral())
-                                                .build());
+                                                 .value(bookCostBase.getSumLTWsDeferral())
+                                                 .build());
 
         shortTermSummaryRecords.add(SummaryRecord.builder().summaryTitle("Tax Cost")
-                                                .value(bookCostBase.getSumLTTaxCost())
-                                                .build());
+                                                 .value(bookCostBase.getSumLTTaxCost())
+                                                 .build());
         return shortTermSummaryRecords;
     }
 

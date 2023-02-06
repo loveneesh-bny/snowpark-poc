@@ -1,0 +1,16 @@
+server:
+  port: 7100
+
+spring:
+  application:
+    name: Snowpark-POC
+
+snowpark-poc:
+  url: https://bnyeagle_dev.east-us-2.azure.snowflakecomputing.com:443
+  user: READ_ALL_DA1_D34_C_EAGLE
+  password: <add-password-here>
+  role: READ_ALL_DA1_D34_C_EAGLE
+  warehouse: DEV_WAREHOUSE
+  db: EAGLE_DEV_WAREHOUSE_DA1_D34_C_EAGLE
+  schema: DA1D34CEAGLE
+
